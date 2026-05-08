@@ -1,9 +1,8 @@
-# app.py - Simple IP logger + video page for Vercel
+# app.py - Simple IP logger for Vercel
 
-import json
 from datetime import datetime
 
-# HTML page with the video and IP display
+# HTML page with video and IP display
 HTML_PAGE = """<!DOCTYPE html>
 <html>
 <head>
@@ -41,37 +40,30 @@ HTML_PAGE = """<!DOCTYPE html>
             border: none;
             display: none;
         }
-        #ip-status {
+        #ip-log {
             position: fixed;
             bottom: 10px;
             right: 10px;
             color: #0f0;
-            background: rgba(0,0,0,0.5);
-            padding: 5px 10px;
+            background: rgba(0,0,0,0.6);
+            padding: 4px 10px;
             border-radius: 5px;
-            font-size: 11px;
+            font-size: 10px;
             font-family: monospace;
             z-index: 999;
+            pointer-events: none;
         }
     </style>
 </head>
 <body>
     <button id="enter">ENTER SITE</button>
     <iframe id="vid" src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&controls=0&rel=0&mute=0" allow="autoplay; fullscreen"></iframe>
-    <div id="ip-status">📡 IP: <span id="ip-display">detecting...</span></div>
+    <div id="ip-log">🌐 IP: <span id="ip-addr">{{IP}}</span></div>
     
     <script>
-        // Get IP from server-side injected value
-        let myIp = "{{IP_ADDRESS}}";
-        if (myIp && myIp !== "") {
-            document.getElementById("ip-display").innerText = myIp;
-        } else {
-            // Fallback: get IP from free API
-            fetch('https://api.ipify.org?format=json')
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById("ip-display").innerText = data.ip;
-                });
+        let visitorIP = "{{IP}}";
+        if (visitorIP && visitorIP !== "") {
+            document.getElementById("ip-addr").innerText = visitorIP;
         }
         
         document.getElementById("enter").onclick = () => {
@@ -82,65 +74,64 @@ HTML_PAGE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-def log_ip(ip, user_agent=""):
-    """Save IP to log file with timestamp"""
+def log_ip(ip, ua=""):
+    """Log IP to file and console"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"[{timestamp}] IP: {ip} | UA: {user_agent}\n"
+    log_line = f"[{timestamp}] IP: {ip} | UA: {ua[:50]}\n"
     
-    # Save to /tmp/ip.log (works on Vercel)
-    with open("/tmp/ip.log", "a") as f:
-        f.write(log_entry)
+    # Write to temp file
+    try:
+        with open("/tmp/ips.log", "a") as f:
+            f.write(log_line)
+    except:
+        pass
     
-    # Also print for Vercel logs
-    print(log_entry.strip())
+    # Print for Vercel logs (this appears in your dashboard)
+    print(log_line.strip())
     return True
 
-def handler(request, context):
-    """Main Vercel function handler"""
-    try:
-        # Get headers as dict
-        headers = dict(request.headers)
-        
-        # Get real IP address
-        ip = headers.get('x-forwarded-for', '').split(',')[0].strip()
-        if not ip:
-            ip = headers.get('x-vercel-forwarded-for', '').split(',')[0].strip()
-        if not ip:
-            ip = headers.get('x-real-ip', '')
-        if not ip:
-            ip = '0.0.0.0'
-        
-        # Get user agent
-        ua = headers.get('user-agent', 'Unknown')
-        
-        # Log the IP
-        log_ip(ip, ua)
-        
-        # Create HTML with IP injected
-        html = HTML_PAGE.replace("{{IP_ADDRESS}}", ip)
-        
-        # Return success response
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "text/html"},
-            "body": html
-        }
-        
-    except Exception as e:
-        # Return simple error page
-        error_html = f"""<!DOCTYPE html>
-        <html>
-        <body style="background:black;color:white;text-align:center;padding-top:50px">
-            <h1>Site is live!</h1>
-            <button onclick="location.reload()" style="padding:15px 30px">Click to Enter</button>
-        </body>
-        </html>"""
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "text/html"},
-            "body": error_html
-        }
-
-# For local testing (optional)
-if __name__ == "__main__":
-    print("Run on Vercel - this is a serverless function")
+def app(environ, start_response):
+    """Vercel expects a WSGI app function named 'app'"""
+    
+    # Get IP from headers
+    # Parse headers from environ
+    headers = {}
+    for key, value in environ.items():
+        if key.startswith('HTTP_'):
+            header_name = key[5:].replace('_', '-').lower()
+            headers[header_name] = value
+    
+    # Get user agent
+    user_agent = headers.get('user-agent', 'Unknown')
+    
+    # Get real IP (check common headers)
+    ip = '0.0.0.0'
+    
+    # Check x-forwarded-for
+    forwarded = headers.get('x-forwarded-for', '')
+    if forwarded:
+        ip = forwarded.split(',')[0].strip()
+    # Check vercel specific header
+    elif headers.get('x-vercel-forwarded-for', ''):
+        ip = headers.get('x-vercel-forwarded-for').split(',')[0].strip()
+    # Check x-real-ip
+    elif headers.get('x-real-ip', ''):
+        ip = headers.get('x-real-ip')
+    # Fallback to remote addr
+    elif environ.get('REMOTE_ADDR'):
+        ip = environ.get('REMOTE_ADDR')
+    
+    # Log the IP
+    log_ip(ip, user_agent)
+    
+    # Create HTML with IP
+    html = HTML_PAGE.replace("{{IP}}", ip)
+    
+    # Send response
+    status = '200 OK'
+    response_headers = [
+        ('Content-Type', 'text/html'),
+        ('Content-Length', str(len(html)))
+    ]
+    start_response(status, response_headers)
+    return [html.encode('utf-8')]
