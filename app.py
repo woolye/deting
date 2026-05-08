@@ -2,6 +2,11 @@ from http.server import BaseHTTPRequestHandler
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        ip = self.headers.get("x-forwarded-for")
+
+        # log IP to Vercel logs (THIS is what actually works)
+        print("Visitor IP:", ip)
+
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
@@ -14,8 +19,8 @@ class handler(BaseHTTPRequestHandler):
             html, body {
               margin: 0;
               height: 100%;
-              background: black;
               overflow: hidden;
+              background: black;
             }
             iframe {
               width: 100vw;
@@ -26,7 +31,7 @@ class handler(BaseHTTPRequestHandler):
         </head>
         <body>
           <iframe
-            src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&controls=0&rel=0&mute=1"
+            src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&controls=0&mute=1"
             allow="autoplay; fullscreen"
             allowfullscreen>
           </iframe>
