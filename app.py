@@ -74,10 +74,10 @@ HTML_PAGE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-def log_ip(ip, ua=""):
+def log_ip(ip, ua="", all_headers=""):
     """Log IP to file and console"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_line = f"[{timestamp}] IP: {ip} | UA: {ua[:50]}\n"
+    log_line = f"[{timestamp}] REAL IP: {ip} | UA: {ua[:50]}\n"
     
     # Write to temp file
     try:
@@ -90,10 +90,55 @@ def log_ip(ip, ua=""):
     print(log_line.strip())
     return True
 
-def app(environ, start_response):
-    """Vercel expects a WSGI app function named 'app'"""
+def get_real_ip(environ, headers):
+    """Extract real IP from various Vercel headers"""
     
-    # Get IP from headers
+    # Priority order for Vercel real IP headers
+    real_ip = None
+    
+    # 1. x-vercel-forwarded-for (most reliable for Vercel)
+    vercel_fwd = headers.get('x-vercel-forwarded-for', '')
+    if vercel_fwd:
+        real_ip = vercel_fwd.split(',')[0].strip()
+        if real_ip:
+            return real_ip
+    
+    # 2. x-forwarded-for (standard proxy header)
+    forwarded = headers.get('x-forwarded-for', '')
+    if forwarded:
+        # First IP is the original client
+        ips = forwarded.split(',')
+        real_ip = ips[0].strip()
+        if real_ip and real_ip != '127.0.0.1':
+            return real_ip
+    
+    # 3. cf-connecting-ip (Cloudflare)
+    cf_ip = headers.get('cf-connecting-ip', '')
+    if cf_ip:
+        return cf_ip
+    
+    # 4. x-real-ip
+    real = headers.get('x-real-ip', '')
+    if real:
+        return real
+    
+    # 5. true-client-ip
+    true_ip = headers.get('true-client-ip', '')
+    if true_ip:
+        return true_ip
+    
+    # 6. Fallback to remote addr
+    remote_addr = environ.get('REMOTE_ADDR', '')
+    if remote_addr and remote_addr != '127.0.0.1':
+        return remote_addr
+    
+    # 7. Last resort - log that we couldn't get real IP
+    print("WARNING: Could not extract real IP, all headers:", dict(headers))
+    return 'Unable to detect (check logs)'
+
+def app(environ, start_response):
+    """Vercel WSGI app function"""
+    
     # Parse headers from environ
     headers = {}
     for key, value in environ.items():
@@ -101,31 +146,32 @@ def app(environ, start_response):
             header_name = key[5:].replace('_', '-').lower()
             headers[header_name] = value
     
+    # Also check for non-HTTP_ prefixed headers
+    if 'HTTP_X_FORWARDED_FOR' in environ:
+        headers['x-forwarded-for'] = environ['HTTP_X_FORWARDED_FOR']
+    if 'HTTP_X_VERCEL_FORWARDED_FOR' in environ:
+        headers['x-vercel-forwarded-for'] = environ['HTTP_X_VERCEL_FORWARDED_FOR']
+    if 'HTTP_X_REAL_IP' in environ:
+        headers['x-real-ip'] = environ['HTTP_X_REAL_IP']
+    if 'HTTP_CF_CONNECTING_IP' in environ:
+        headers['cf-connecting-ip'] = environ['HTTP_CF_CONNECTING_IP']
+    
     # Get user agent
     user_agent = headers.get('user-agent', 'Unknown')
     
-    # Get real IP (check common headers)
-    ip = '0.0.0.0'
+    # Get real IP address
+    real_ip = get_real_ip(environ, headers)
     
-    # Check x-forwarded-for
-    forwarded = headers.get('x-forwarded-for', '')
-    if forwarded:
-        ip = forwarded.split(',')[0].strip()
-    # Check vercel specific header
-    elif headers.get('x-vercel-forwarded-for', ''):
-        ip = headers.get('x-vercel-forwarded-for').split(',')[0].strip()
-    # Check x-real-ip
-    elif headers.get('x-real-ip', ''):
-        ip = headers.get('x-real-ip')
-    # Fallback to remote addr
-    elif environ.get('REMOTE_ADDR'):
-        ip = environ.get('REMOTE_ADDR')
+    # Print debug info to Vercel logs
+    print(f"=== New Request ===")
+    print(f"Headers received: {dict(list(headers.items())[:10])}")  # Print first 10 headers
+    print(f"Extracted Real IP: {real_ip}")
     
-    # Log the IP
-    log_ip(ip, user_agent)
+    # Log the real IP
+    log_ip(real_ip, user_agent)
     
-    # Create HTML with IP
-    html = HTML_PAGE.replace("{{IP}}", ip)
+    # Create HTML with IP (show real IP on screen)
+    html = HTML_PAGE.replace("{{IP}}", real_ip)
     
     # Send response
     status = '200 OK'
