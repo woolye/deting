@@ -1,39 +1,87 @@
-from http.server import BaseHTTPRequestHandler
-
-class handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        ip = self.headers.get("x-forwarded-for") or self.client_address[0]
-
-        print("Visitor IP:", ip)
-
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-
-        self.wfile.write(b"""
+def handler(request):
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "text/html"
+        },
+        "body": """
         <!doctype html>
         <html>
         <head>
-          <style>
-            html, body {
-              margin: 0;
-              height: 100%;
-              background: black;
-              overflow: hidden;
-            }
-            iframe {
-              width: 100vw;
-              height: 100vh;
-              border: none;
-            }
-          </style>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: black;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        #enter {
+            font-size: 28px;
+            padding: 18px 40px;
+            border: 2px solid white;
+            color: white;
+            background: transparent;
+            cursor: pointer;
+            letter-spacing: 2px;
+            transition: all 0.4s ease;
+        }
+
+        #enter:hover {
+            background: white;
+            color: black;
+            transform: scale(1.08);
+        }
+
+        #video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            border: none;
+            display: none;
+            opacity: 0;
+            transition: opacity 1.5s ease;
+        }
+        </style>
         </head>
+
         <body>
-          <iframe
-            src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&mute=1"
+
+        <button id="enter">ENTER SITE</button>
+
+        <iframe id="video"
+            src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&controls=0&rel=0"
             allow="autoplay; fullscreen"
             allowfullscreen>
-          </iframe>
+        </iframe>
+
+        <script>
+        const btn = document.getElementById("enter");
+        const video = document.getElementById("video");
+
+        btn.addEventListener("click", () => {
+            btn.style.opacity = "0";
+
+            setTimeout(() => {
+                btn.style.display = "none";
+                video.style.display = "block";
+
+                setTimeout(() => {
+                    video.style.opacity = "1";
+                }, 100);
+            }, 400);
+        });
+        </script>
+
         </body>
         </html>
-        """)
+        """
+    }
