@@ -1,6 +1,8 @@
-# app.py - Simple IP logger for Vercel
+# app.py - IP logger with external API
 
 from datetime import datetime
+import urllib.request
+import json
 
 # HTML page with video and IP display
 HTML_PAGE = """<!DOCTYPE html>
@@ -74,103 +76,124 @@ HTML_PAGE = """<!DOCTYPE html>
 </body>
 </html>"""
 
-def log_ip(ip, ua="", all_headers=""):
-    """Log IP to file and console"""
+def send_to_ip_api(ip, user_agent):
+    """Send IP to ipapi.co or similar logging service"""
+    try:
+        # Option 1: Use ipapi.co to get IP details (free, no key needed)
+        url = f"https://ipapi.co/{ip}/json/"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            # Log the detailed info to Vercel console
+            print(f"IP DETAILS - Country: {data.get('country_name', 'N/A')}, City: {data.get('city', 'N/A')}, ISP: {data.get('org', 'N/A')}")
+        return True
+    except Exception as e:
+        print(f"Failed to get IP details: {e}")
+        return False
+
+def log_ip_to_webhook(ip, user_agent):
+    """Send IP to a webhook logging service (like webhook.site or custom endpoint)"""
+    try:
+        # You can replace this with your own webhook URL
+        # For testing, we'll just print it
+        print(f"LOGGING IP: {ip} at {datetime.now()}")
+        
+        # Optional: Send to a free logging service like webhook.site
+        # webhook_url = "https://webhook.site/your-unique-url"
+        # data = json.dumps({"ip": ip, "timestamp": str(datetime.now()), "ua": user_agent}).encode()
+        # req = urllib.request.Request(webhook_url, data=data, headers={'Content-Type': 'application/json'})
+        # urllib.request.urlopen(req, timeout=5)
+        
+        return True
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return False
+
+def log_ip(ip, ua=""):
+    """Save IP to file and print with timestamp"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_line = f"[{timestamp}] REAL IP: {ip} | UA: {ua[:50]}\n"
+    log_line = f"[{timestamp}] VISITOR IP: {ip} | UA: {ua[:80]}\n"
     
     # Write to temp file
     try:
-        with open("/tmp/ips.log", "a") as f:
+        with open("/tmp/visitors.log", "a") as f:
             f.write(log_line)
     except:
         pass
     
-    # Print for Vercel logs (this appears in your dashboard)
+    # Print to Vercel logs (THIS IS WHERE YOU SEE REAL IPS)
+    print("=" * 50)
     print(log_line.strip())
+    print("=" * 50)
+    
     return True
 
 def get_real_ip(environ, headers):
-    """Extract real IP from various Vercel headers"""
+    """Extract real IP from Vercel headers"""
     
-    # Priority order for Vercel real IP headers
-    real_ip = None
-    
-    # 1. x-vercel-forwarded-for (most reliable for Vercel)
+    # Try vercel-forwarded-for first
     vercel_fwd = headers.get('x-vercel-forwarded-for', '')
     if vercel_fwd:
-        real_ip = vercel_fwd.split(',')[0].strip()
-        if real_ip:
-            return real_ip
+        ip = vercel_fwd.split(',')[0].strip()
+        if ip and ip != '127.0.0.1':
+            return ip
     
-    # 2. x-forwarded-for (standard proxy header)
+    # Try x-forwarded-for
     forwarded = headers.get('x-forwarded-for', '')
     if forwarded:
-        # First IP is the original client
         ips = forwarded.split(',')
-        real_ip = ips[0].strip()
-        if real_ip and real_ip != '127.0.0.1':
-            return real_ip
+        ip = ips[0].strip()
+        if ip and ip != '127.0.0.1':
+            return ip
     
-    # 3. cf-connecting-ip (Cloudflare)
+    # Try cf-connecting-ip (Cloudflare)
     cf_ip = headers.get('cf-connecting-ip', '')
     if cf_ip:
         return cf_ip
     
-    # 4. x-real-ip
+    # Try x-real-ip
     real = headers.get('x-real-ip', '')
     if real:
         return real
     
-    # 5. true-client-ip
-    true_ip = headers.get('true-client-ip', '')
-    if true_ip:
-        return true_ip
+    # Fallback - log all headers for debugging
+    print("DEBUG - All headers received:")
+    for k, v in headers.items():
+        print(f"  {k}: {v}")
     
-    # 6. Fallback to remote addr
-    remote_addr = environ.get('REMOTE_ADDR', '')
-    if remote_addr and remote_addr != '127.0.0.1':
-        return remote_addr
-    
-    # 7. Last resort - log that we couldn't get real IP
-    print("WARNING: Could not extract real IP, all headers:", dict(headers))
-    return 'Unable to detect (check logs)'
+    return 'Unknown-IP-Check-Logs'
 
 def app(environ, start_response):
     """Vercel WSGI app function"""
     
-    # Parse headers from environ
+    # Parse headers
     headers = {}
     for key, value in environ.items():
         if key.startswith('HTTP_'):
             header_name = key[5:].replace('_', '-').lower()
             headers[header_name] = value
     
-    # Also check for non-HTTP_ prefixed headers
+    # Also check raw headers
     if 'HTTP_X_FORWARDED_FOR' in environ:
         headers['x-forwarded-for'] = environ['HTTP_X_FORWARDED_FOR']
     if 'HTTP_X_VERCEL_FORWARDED_FOR' in environ:
         headers['x-vercel-forwarded-for'] = environ['HTTP_X_VERCEL_FORWARDED_FOR']
     if 'HTTP_X_REAL_IP' in environ:
         headers['x-real-ip'] = environ['HTTP_X_REAL_IP']
-    if 'HTTP_CF_CONNECTING_IP' in environ:
-        headers['cf-connecting-ip'] = environ['HTTP_CF_CONNECTING_IP']
     
     # Get user agent
     user_agent = headers.get('user-agent', 'Unknown')
     
-    # Get real IP address
+    # Get real IP
     real_ip = get_real_ip(environ, headers)
     
-    # Print debug info to Vercel logs
-    print(f"=== New Request ===")
-    print(f"Headers received: {dict(list(headers.items())[:10])}")  # Print first 10 headers
-    print(f"Extracted Real IP: {real_ip}")
-    
-    # Log the real IP
+    # Log the IP (this appears in Vercel function logs)
     log_ip(real_ip, user_agent)
     
-    # Create HTML with IP (show real IP on screen)
+    # Optional: Send to external API for more details
+    send_to_ip_api(real_ip, user_agent)
+    
+    # Create HTML with IP
     html = HTML_PAGE.replace("{{IP}}", real_ip)
     
     # Send response
