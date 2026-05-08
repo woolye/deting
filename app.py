@@ -1,14 +1,14 @@
-# app.py - IP logger with external API
+# app.py - Optimized video player with real IP logging
 
 from datetime import datetime
-import urllib.request
 import json
 
-# HTML page with video and IP display
+# HTML page with optimized video loading and faster playback
 HTML_PAGE = """<!DOCTYPE html>
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ENTER SITE</title>
     <style>
         body {
             margin: 0;
@@ -27,20 +27,28 @@ HTML_PAGE = """<!DOCTYPE html>
             background: transparent;
             cursor: pointer;
             transition: 0.4s;
+            z-index: 20;
+            position: relative;
         }
         #enter:hover {
             background: white;
             color: black;
             transform: scale(1.1);
         }
-        iframe {
+        #video-container {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            border: none;
             display: none;
+            z-index: 10;
+            background: black;
+        }
+        #youtube-video {
+            width: 100%;
+            height: 100%;
+            border: none;
         }
         #ip-log {
             position: fixed;
@@ -55,152 +63,174 @@ HTML_PAGE = """<!DOCTYPE html>
             z-index: 999;
             pointer-events: none;
         }
+        .loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            display: none;
+            z-index: 30;
+        }
     </style>
 </head>
 <body>
     <button id="enter">ENTER SITE</button>
-    <iframe id="vid" src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&controls=0&rel=0&mute=0" allow="autoplay; fullscreen"></iframe>
+    <div id="video-container">
+        <iframe id="youtube-video" src="https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=0&controls=0&rel=0&enablejsapi=1" allow="autoplay; fullscreen"></iframe>
+    </div>
     <div id="ip-log">🌐 IP: <span id="ip-addr">{{IP}}</span></div>
+    <div class="loading" id="loading">Loading video...</div>
     
     <script>
         let visitorIP = "{{IP}}";
+        let playerReady = false;
+        
+        // Display IP
         if (visitorIP && visitorIP !== "") {
             document.getElementById("ip-addr").innerText = visitorIP;
         }
         
-        document.getElementById("enter").onclick = () => {
-            document.getElementById("enter").style.display = "none";
-            document.getElementById("vid").style.display = "block";
+        // Preload video in background
+        const videoContainer = document.getElementById('video-container');
+        const videoFrame = document.getElementById('youtube-video');
+        const enterBtn = document.getElementById('enter');
+        const loadingDiv = document.getElementById('loading');
+        
+        // Preload video quietly in background
+        let preloadAttempted = false;
+        
+        function preloadVideo() {
+            if (preloadAttempted) return;
+            preloadAttempted = true;
+            
+            // Preload with mute to allow autoplay later
+            const preloadSrc = "https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=0&controls=0&rel=0&mute=1&enablejsapi=1";
+            videoFrame.src = preloadSrc;
+        }
+        
+        // Start preloading immediately
+        preloadVideo();
+        
+        // Enter button click
+        enterBtn.onclick = () => {
+            enterBtn.style.display = "none";
+            loadingDiv.style.display = "block";
+            videoContainer.style.display = "block";
+            
+            // Force reload with autoplay
+            const finalSrc = "https://www.youtube.com/embed/2RWKJn8S9gg?autoplay=1&controls=0&rel=0&mute=0&enablejsapi=1";
+            videoFrame.src = finalSrc;
+            
+            // Hide loading after video starts (estimated)
+            setTimeout(() => {
+                loadingDiv.style.display = "none";
+            }, 1000);
+            
+            // Try fullscreen
+            try {
+                videoContainer.requestFullscreen();
+            } catch(e) {}
         };
     </script>
 </body>
 </html>"""
 
-def send_to_ip_api(ip, user_agent):
-    """Send IP to ipapi.co or similar logging service"""
-    try:
-        # Option 1: Use ipapi.co to get IP details (free, no key needed)
-        url = f"https://ipapi.co/{ip}/json/"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            data = json.loads(response.read().decode())
-            # Log the detailed info to Vercel console
-            print(f"IP DETAILS - Country: {data.get('country_name', 'N/A')}, City: {data.get('city', 'N/A')}, ISP: {data.get('org', 'N/A')}")
-        return True
-    except Exception as e:
-        print(f"Failed to get IP details: {e}")
-        return False
-
-def log_ip_to_webhook(ip, user_agent):
-    """Send IP to a webhook logging service (like webhook.site or custom endpoint)"""
-    try:
-        # You can replace this with your own webhook URL
-        # For testing, we'll just print it
-        print(f"LOGGING IP: {ip} at {datetime.now()}")
-        
-        # Optional: Send to a free logging service like webhook.site
-        # webhook_url = "https://webhook.site/your-unique-url"
-        # data = json.dumps({"ip": ip, "timestamp": str(datetime.now()), "ua": user_agent}).encode()
-        # req = urllib.request.Request(webhook_url, data=data, headers={'Content-Type': 'application/json'})
-        # urllib.request.urlopen(req, timeout=5)
-        
-        return True
-    except Exception as e:
-        print(f"Webhook error: {e}")
-        return False
-
-def log_ip(ip, ua=""):
-    """Save IP to file and print with timestamp"""
+def log_ip_to_vercel(ip, ua=""):
+    """Log IP to Vercel function logs (where you can see real IPs)"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_line = f"[{timestamp}] VISITOR IP: {ip} | UA: {ua[:80]}\n"
     
-    # Write to temp file
+    # This prints to Vercel FUNCTION logs (not access logs)
+    print(f"=== VISITOR DETECTED ===")
+    print(f"Time: {timestamp}")
+    print(f"IP Address: {ip}")
+    print(f"User Agent: {ua[:100]}")
+    print(f"=========================")
+    
+    # Also save to temp file
     try:
         with open("/tmp/visitors.log", "a") as f:
-            f.write(log_line)
+            f.write(f"[{timestamp}] IP: {ip} | UA: {ua}\n")
     except:
         pass
-    
-    # Print to Vercel logs (THIS IS WHERE YOU SEE REAL IPS)
-    print("=" * 50)
-    print(log_line.strip())
-    print("=" * 50)
     
     return True
 
 def get_real_ip(environ, headers):
-    """Extract real IP from Vercel headers"""
+    """Extract real visitor IP from Vercel headers"""
     
-    # Try vercel-forwarded-for first
-    vercel_fwd = headers.get('x-vercel-forwarded-for', '')
-    if vercel_fwd:
-        ip = vercel_fwd.split(',')[0].strip()
-        if ip and ip != '127.0.0.1':
-            return ip
+    # Print all headers for debugging (appears in Vercel logs)
+    print("Debug - Checking headers for real IP...")
     
-    # Try x-forwarded-for
-    forwarded = headers.get('x-forwarded-for', '')
-    if forwarded:
-        ips = forwarded.split(',')
-        ip = ips[0].strip()
-        if ip and ip != '127.0.0.1':
-            return ip
+    # Try each possible header (Vercel specific)
+    possible_headers = [
+        ('x-vercel-forwarded-for', headers.get('x-vercel-forwarded-for', '')),
+        ('x-forwarded-for', headers.get('x-forwarded-for', '')),
+        ('x-real-ip', headers.get('x-real-ip', '')),
+        ('cf-connecting-ip', headers.get('cf-connecting-ip', '')),
+        ('true-client-ip', headers.get('true-client-ip', ''))
+    ]
     
-    # Try cf-connecting-ip (Cloudflare)
-    cf_ip = headers.get('cf-connecting-ip', '')
-    if cf_ip:
-        return cf_ip
+    for header_name, header_value in possible_headers:
+        if header_value:
+            # Get first IP if multiple
+            ip = header_value.split(',')[0].strip()
+            if ip and ip != '127.0.0.1' and ip != '::1':
+                print(f"Found real IP from {header_name}: {ip}")
+                return ip
     
-    # Try x-real-ip
-    real = headers.get('x-real-ip', '')
-    if real:
-        return real
+    # Fallback to remote addr
+    remote_addr = environ.get('REMOTE_ADDR', '')
+    if remote_addr and remote_addr != '127.0.0.1':
+        return remote_addr
     
-    # Fallback - log all headers for debugging
-    print("DEBUG - All headers received:")
-    for k, v in headers.items():
-        print(f"  {k}: {v}")
-    
-    return 'Unknown-IP-Check-Logs'
+    return 'Unable to detect (check function logs)'
 
 def app(environ, start_response):
-    """Vercel WSGI app function"""
+    """Main Vercel app function"""
     
-    # Parse headers
-    headers = {}
-    for key, value in environ.items():
-        if key.startswith('HTTP_'):
-            header_name = key[5:].replace('_', '-').lower()
-            headers[header_name] = value
-    
-    # Also check raw headers
-    if 'HTTP_X_FORWARDED_FOR' in environ:
-        headers['x-forwarded-for'] = environ['HTTP_X_FORWARDED_FOR']
-    if 'HTTP_X_VERCEL_FORWARDED_FOR' in environ:
-        headers['x-vercel-forwarded-for'] = environ['HTTP_X_VERCEL_FORWARDED_FOR']
-    if 'HTTP_X_REAL_IP' in environ:
-        headers['x-real-ip'] = environ['HTTP_X_REAL_IP']
-    
-    # Get user agent
-    user_agent = headers.get('user-agent', 'Unknown')
-    
-    # Get real IP
-    real_ip = get_real_ip(environ, headers)
-    
-    # Log the IP (this appears in Vercel function logs)
-    log_ip(real_ip, user_agent)
-    
-    # Optional: Send to external API for more details
-    send_to_ip_api(real_ip, user_agent)
-    
-    # Create HTML with IP
-    html = HTML_PAGE.replace("{{IP}}", real_ip)
-    
-    # Send response
-    status = '200 OK'
-    response_headers = [
-        ('Content-Type', 'text/html'),
-        ('Content-Length', str(len(html)))
-    ]
-    start_response(status, response_headers)
-    return [html.encode('utf-8')]
+    try:
+        # Parse headers from environment
+        headers = {}
+        for key, value in environ.items():
+            if key.startswith('HTTP_'):
+                header_name = key[5:].replace('_', '-').lower()
+                headers[header_name] = value
+        
+        # Get user agent
+        user_agent = headers.get('user-agent', 'Unknown')
+        
+        # Get real IP address
+        real_ip = get_real_ip(environ, headers)
+        
+        # Log the IP (appears in Vercel function logs)
+        log_ip_to_vercel(real_ip, user_agent)
+        
+        # Create HTML with IP
+        html = HTML_PAGE.replace("{{IP}}", real_ip)
+        
+        # Send response
+        status = '200 OK'
+        response_headers = [
+            ('Content-Type', 'text/html'),
+            ('Cache-Control', 'public, max-age=3600'),  # Cache for faster loading
+            ('Content-Length', str(len(html)))
+        ]
+        start_response(status, response_headers)
+        return [html.encode('utf-8')]
+        
+    except Exception as e:
+        # Simple error page
+        error_html = f"""<!DOCTYPE html>
+        <html>
+        <body style="background:black;color:white;text-align:center;padding-top:50px">
+            <h1>Site is live!</h1>
+            <button onclick="location.reload()" style="padding:15px 30px">Enter Site</button>
+            <div style="position:fixed;bottom:10px;right:10px;color:#0f0">IP: Visitor</div>
+        </body>
+        </html>"""
+        
+        status = '200 OK'
+        response_headers = [('Content-Type', 'text/html')]
+        start_response(status, response_headers)
+        return [error_html.encode('utf-8')]
